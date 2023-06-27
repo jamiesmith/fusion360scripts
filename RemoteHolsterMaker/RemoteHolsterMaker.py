@@ -271,7 +271,7 @@ class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             inputs.addFloatSpinnerCommandInput('bottomThickness', 'Bottom Thickness', '', 0.25, 100.0, finestIncrement, defaultBottomThickness)
 
             initTolerance = adsk.core.ValueInput.createByReal(defaultTolerance)
-            inputs.addFloatSpinnerCommandInput('tolerance', 'Tolerance', '', 0.25, 100.0, finestIncrement, defaultTolerance)
+            inputs.addFloatSpinnerCommandInput('tolerance', 'Tolerance', '', 0.25, 100.0, 0.01, defaultTolerance)
 
             initTemp = adsk.core.ValueInput.createByReal(0)
             inputs.addIntegerSpinnerCommandInput('temp', 'Temp', 0, 50, 1, 0)
@@ -309,7 +309,7 @@ class Holster:
 
     @property
     def remoteWidth(self):
-        return self._remoteWidth
+        return self._remoteWidth + self._tolerance
     @remoteWidth.setter
     def remoteWidth(self, value):
         self._remoteWidth = value
@@ -323,7 +323,7 @@ class Holster:
 
     @property
     def remoteThickness(self):
-        return self._remoteThickness
+        return self._remoteThickness + self._tolerance
     @remoteThickness.setter
     def remoteThickness(self, value):
         self._remoteThickness = value
@@ -427,7 +427,6 @@ class Holster:
             # Sketch base
             base_rect_profile = createBaseRectSketch(component, self)
             distance = createDistance((self.remoteLength + self.bottomThickness) * SCALE)
-            # ui.messageBox("Dimensions %s x %s x %s" % (str(self.remoteLength), str(self.remoteWidth), str(self.remoteThickness)))
             
             # Extrude to full height
             #

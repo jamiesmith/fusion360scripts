@@ -3,7 +3,7 @@
 	"type":	"script",
 	"author":	"jamiesmithnc",
 	"description":	{
-		"":	""
+		"":	"Make a remote holster"
 	},
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true

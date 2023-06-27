@@ -3,7 +3,7 @@
 	"type":	"script",
 	"author":	"benlaurie / jamiesmithnc",
 	"description":	{
-		"":	""
+		"":	"Make a gridfinity-sized box"
 	},
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
