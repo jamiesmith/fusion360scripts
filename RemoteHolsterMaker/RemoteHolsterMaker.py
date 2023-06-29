@@ -1,61 +1,91 @@
-# Author- Jamie Smith
-# Description- Make a remote holster
-#
+#Author-
+#Description-
+
 import math
-from typing import Tuple
-# import sys
-# sys.path.append("/Users/jamie/Library/Application Support/Autodesk/Autodesk Fusion 360/API/Python/defs")
 import adsk.core, adsk.fusion, adsk.cam, traceback
 
-# Some Constants
-#
-# Don't know why this is here
-SCALE = 0.1
+#############################################
+# Globals
+#############################################
+_app = adsk.core.Application.cast(None)
+_ui = adsk.core.UserInterface.cast(None)
+_des = adsk.fusion.Design.cast(None)
+_handlers = []
+_commandId = 'Remote Holster Maker'
 
+#############################################
 # Default Values
+#############################################
+
+defaultHolsterName = "TV Remote Holster"
+
+# Remote Details
 #
-defaultHolsterName = "Holster"
 defaultRemoteWidth = 80.0
 defaultRemoteLength = 44.0
 defaultRemoteThickness = 15.0
+
+# Holster Details
+#
 defaultFrontSlotWidth = 10.0
 defaultFrontHeight = 22.0
+
+# Holster Appearance
+#
 defaultBackCornerRound = 4.0
-defaultFillet = 0.5
+defaultSoftenFillet = 0.5
 defaultFrontSlotRound = 3.0
+
+# Holster Strength
+#
 defaultSideThickness = 3.0
 defaultBackThickness = 3.0
 defaultBottomThickness = 3.0
+
+# Tolerance
+#
 defaultTolerance = 0.5
 
-# Actual values
-holsterName = defaultHolsterName
-remoteWidth = defaultRemoteWidth * SCALE
-remoteLength = defaultRemoteLength * SCALE
-remoteThickness = defaultRemoteThickness * SCALE
-frontSlotWidth = defaultFrontSlotWidth * SCALE
-frontHeight = defaultFrontHeight * SCALE
-backCornerRound = defaultBackCornerRound * SCALE
-fillet = defaultFillet * SCALE
-frontSlotRound = defaultFrontSlotRound * SCALE
-sideThickness = defaultSideThickness * SCALE
-backThickness = defaultBackThickness * SCALE
-bottomThickness = defaultBottomThickness * SCALE
-tolerance = defaultTolerance * SCALE
+#############################################
+# Global Command inputs
+#############################################
 
-# global set of event handlers to keep them referenced for the duration of the command
-handlers = []
-app = adsk.core.Application.get()
-if app:
-    ui = app.userInterface
+_holsterName       = adsk.core.StringValueCommandInput.cast(None)
+_remoteWidth       = adsk.core.FloatSpinnerCommandInput.cast(None)
+_remoteLength      = adsk.core.FloatSpinnerCommandInput.cast(None)
+_remoteThickness   = adsk.core.FloatSpinnerCommandInput.cast(None)
+_frontSlotWidth    = adsk.core.IntegerSliderCommandInput.cast(None)
+_frontHeight       = adsk.core.IntegerSliderCommandInput.cast(None)
+_backCornerRound   = adsk.core.IntegerSliderCommandInput.cast(None)
+_softenFillet      = adsk.core.FloatSpinnerCommandInput.cast(None)
+_frontSlotRound    = adsk.core.IntegerSliderCommandInput.cast(None)
+_sideThickness     = adsk.core.FloatSpinnerCommandInput.cast(None)
+_backThickness     = adsk.core.FloatSpinnerCommandInput.cast(None)
+_bottomThickness   = adsk.core.FloatSpinnerCommandInput.cast(None)
+_tolerance         = adsk.core.IntegerSliderCommandInput.cast(None)
 
-newComp = None
+#############################################
+# Global Command Groups
+#############################################
 
-# Consts
+_remoteDetailsGroup      = adsk.core.GroupCommandInput.cast(None)
+_holsterDetailsGroup     = adsk.core.GroupCommandInput.cast(None)
+_holsterAppearanceGroup  = adsk.core.GroupCommandInput.cast(None)
+_holsterStrengthGroup    = adsk.core.GroupCommandInput.cast(None)
+_toleranceGroup          = adsk.core.GroupCommandInput.cast(None)
+
+
+#############################################
+# Constants
+#############################################
 CUT = adsk.fusion.FeatureOperations.CutFeatureOperation
 JOIN = adsk.fusion.FeatureOperations.JoinFeatureOperation
 NEW_BODY = adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+SCALE = 0.1
 
+#############################################
+# Utility Functions
+#############################################
 def createComponent(design: adsk.fusion.Design, name: str) -> adsk.fusion.Component:
     rootComp = design.rootComponent
     allOccs = rootComp.occurrences
@@ -79,140 +109,118 @@ def createReal(r) -> adsk.core.ValueInput:
 def close(a, b):
     return abs(a - b) < 1e-5 * SCALE
 
-# Some basic utility commands
-#
-def createBaseRectSketch(component: adsk.fusion.Component, holster) -> adsk.fusion.Profile:
+def createBaseRectSketch(component: adsk.fusion.Component) -> adsk.fusion.Profile:
     base_sketch = component.sketches.add(component.xYConstructionPlane)
     base_sketch.name = "Base Sketch"
     p0 = create2DPoint(0, 0)
-    p1 = create2DPoint((holster.remoteWidth + 2 * holster.sideThickness) * SCALE, (holster.remoteThickness + holster.sideThickness + holster.backThickness) * SCALE)
-    base_rect = base_sketch.sketchCurves.sketchLines.addTwoPointRectangle(p0, p1)
+    p1 = create2DPoint((_remoteWidth + 2 * _sideThickness) * SCALE, (_remoteThickness + _sideThickness + _backThickness) * SCALE)
+    base_sketch.sketchCurves.sketchLines.addTwoPointRectangle(p0, p1)
     # FIXME: there must be a better way!
     base_rect_profile = base_sketch.profiles.item(0)
     return base_rect_profile
 
-def createCurvedRect(component: adsk.fusion.Component, name, width: float, depth: float, radius: float, z: float) -> Tuple[adsk.core.ObjectCollection, adsk.fusion.Profile]:
-    path = adsk.core.ObjectCollection.create()
+def createScrewHolesSketch(component: adsk.fusion.Component, diameter) -> adsk.core.ObjectCollection:
     sketch: adsk.fusion.Sketch = component.sketches.add(component.xZConstructionPlane)
-    sketch.name = name
-    lines = sketch.sketchCurves.sketchLines
-    p = lambda x, y: createPoint(x, y , z)
+    sketch.name = "Screw Holes Sketch"
 
-    p0 = p(radius, 0)
-    p1 = p(width - radius, 0)
-    l0 = lines.addByTwoPoints(p0, p1)
-    p2 = p(width, radius)
-    p3 = p(width, depth - radius)
-    l1 = lines.addByTwoPoints(p2, p3)
-    p4 = p(width - radius, depth)
-    p5 = p(radius, depth)
-    l2 = lines.addByTwoPoints(p4, p5)
-    p6 = p(0, depth - radius)
-    p7 = p(0, radius)
-    l3 = lines.addByTwoPoints(p6, p7)
+    holesCenter = (_sideThickness + _remoteWidth / 2)
+    holesBack = (_sideThickness + _remoteThickness)
+    holesSpace = (_bottomThickness + _remoteLength) / 4 * -1
+    
+    sketch.sketchCurves.sketchCircles.addByCenterRadius(createPoint(holesCenter * SCALE, holesSpace * SCALE, holesBack * SCALE), diameter * SCALE)
+    sketch.sketchCurves.sketchCircles.addByCenterRadius(createPoint(holesCenter * SCALE, 3 * holesSpace * SCALE, holesBack * SCALE), diameter * SCALE)
 
-    arcs = sketch.sketchCurves.sketchArcs
+    circles = adsk.core.ObjectCollection.create()
+    for n in range(2):
+        circles.add(sketch.profiles.item(n))
 
-    p7c = p(radius, radius)
-    a0 = arcs.addByCenterStartSweep(p7c, p7, math.pi / 2)
-    # FIXME: you'd've thought all these merges made a single thing. You'd be wrong.
-    # The arcs end up joined to the lines they were started on but the merges do nothing.
-    #a0.endSketchPoint.merge(l0.startSketchPoint)
-    #path.add(a0)
-    p1c = p(width - radius, radius)
-    a1 = arcs.addByCenterStartSweep(p1c, p1, math.pi / 2)
-    #a1.endSketchPoint.merge(l1.startSketchPoint)
-    #path.add(a1)
-    p3c = p(width - radius, depth - radius)
-    a2 = arcs.addByCenterStartSweep(p3c, p3, math.pi / 2)
-    #a2.endSketchPoint.merge(l2.startSketchPoint)
-    #path.add(a2)
-    p5c = p(radius, depth - radius)
-    a3 = arcs.addByCenterStartSweep(p5c, p5, math.pi / 2)
-    #a3.endSketchPoint.merge(l3.startSketchPoint)
-    #path.add(a3)
+    return circles
 
-    # These have to be in exactly the right order
-    path.add(l3)
-    path.add(a3)
-    path.add(l2)
-    path.add(a2)
-    path.add(l1)
-    path.add(a1)
-    path.add(l0)
-    path.add(a0)
+def createPocketSketch(component: adsk.fusion.Component) -> adsk.core.ObjectCollection:
+    sketch: adsk.fusion.Sketch = component.sketches.add(component.xYConstructionPlane)
+    sketch.name = "Pocket Sketch"
+    
+    p1 = createPoint((_sideThickness) * SCALE, (_sideThickness) * SCALE, (_remoteLength + _bottomThickness) * SCALE)
+    p2 = createPoint((_sideThickness + _remoteWidth) * SCALE, (_sideThickness + _remoteThickness) * SCALE, (_remoteLength + _bottomThickness) * SCALE)
 
-    # FIXME: not actually a path
-    return path, sketch.profiles.item(0)
+    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
 
-# def createBaseSweepSketch(component: adsk.fusion.Component) -> adsk.core.ObjectCollection:
-#     b, _ = createCurvedRect(component,  "Base Sweep Sketch", slotDimension, slotDimension, baseCornerRadius, 0)
-#     return b
+    rect = adsk.core.ObjectCollection.create()
+    rect.add(sketch.profiles.item(0))
 
-class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
+    return rect
+            
+def createFrontSketch(component: adsk.fusion.Component) -> adsk.core.ObjectCollection:
+    sketch: adsk.fusion.Sketch = component.sketches.add(component.xYConstructionPlane)
+    sketch.name = "Front Sketch"
+
+    p1 = createPoint(0, 0, (_remoteLength + _bottomThickness) * SCALE)
+    p2 = createPoint((2 * _sideThickness + _remoteWidth) * SCALE, (_sideThickness + _remoteThickness) * SCALE, (_remoteLength + _bottomThickness) * SCALE)
+
+    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
+
+    rect = adsk.core.ObjectCollection.create()
+    rect.add(sketch.profiles.item(0))
+
+    return rect
+
+def createSlotSketch(component: adsk.fusion.Component) -> adsk.core.ObjectCollection:
+    sketch: adsk.fusion.Sketch = component.sketches.add(component.xZConstructionPlane)
+    sketch.name = "Slot Sketch"
+    
+    slotLeft = (2 * _sideThickness + _remoteWidth - _frontSlotWidth) / 2
+    p1 = createPoint(slotLeft * SCALE, 0, 0)
+    p2 = createPoint((slotLeft + _frontSlotWidth) * SCALE, -1 * (_frontHeight + _bottomThickness) * SCALE, 0)
+
+    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
+   
+    rect = adsk.core.ObjectCollection.create()
+    rect.add(sketch.profiles.item(0))
+
+    return rect
+
+
+def run(context):
+    try:
+        global _app, _ui, _des
+
+        _app = adsk.core.Application.get()
+        _ui  = _app.userInterface        
+        doc = _app.activeDocument
+        prods = doc.products
+        _des = prods.itemByProductType('DesignProductType')
+        if not _des:
+            raise Exception('Failed to get fusion design.')
+
+        activeProd = _app.activeProduct
+
+        cmdDef = _ui.commandDefinitions.itemById(_commandId)
+        if not cmdDef:
+            # Create a command definition.
+            cmdDef = _ui.commandDefinitions.addButtonDefinition(_commandId, 'Remote Holster Maker', 'Remote Holster Maker') 
+        
+        # Connect to the command created event.
+        onCommandCreated = HolsterCommandCreatedHandler()
+        cmdDef.commandCreated.add(onCommandCreated)
+        _handlers.append(onCommandCreated)
+        
+        # Execute the command.
+        cmdDef.execute()
+
+        # prevent this module from being terminate when the script returns, because we are waiting for event handlers to fire
+        adsk.autoTerminate(False)
+    except:
+        if _ui:
+            _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+
+#############################################
+# Handlers
+#############################################
+class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     def __init__(self):
         super().__init__()
-    def notify(self, args):
-        try:
-            unitsMgr = app.activeProduct.unitsManager
-            command = args.firingEvent.sender
-            inputs = command.commandInputs
-
-            holster = Holster()
-            
-            for input in inputs:
-                if input.id == 'holsterName':
-                    holster.holsterName = input.value
-                elif input.id == 'remoteWidth':
-                    holster.remoteWidth = input.value
-                elif input.id == 'remoteLength':
-                    holster.remoteLength = input.value
-                elif input.id == 'remoteThickness':
-                    holster.remoteThickness = input.value
-                elif input.id == 'frontSlotWidth':
-                    holster.frontSlotWidth = input.value
-                elif input.id == 'frontHeight':
-                    holster.frontHeight = input.value
-                elif input.id == 'backCornerRound':
-                    holster.backCornerRound = input.value
-                elif input.id == 'fillet':
-                    holster.fillet = input.value
-                elif input.id == 'frontSlotRound':
-                    holster.frontSlotRound = input.value
-                elif input.id == 'sideThickness':
-                    holster.sideThickness = input.value                
-                elif input.id == 'backThickness':
-                    holster.backThickness = input.value                
-                elif input.id == 'bottomThickness':
-                    holster.bottomThickness = input.value                
-                elif input.id == 'tolerance':
-                    holster.tolerance = input.value                
-                elif input.id == 'temp':
-                    holster.temp = input.value                
-             
-            holster.buildHolster();
-            
-            args.isValidResult = True
-
-        except:
-            if ui:
-                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-class HolsterCommandDestroyHandler(adsk.core.CommandEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            # when the command is done, terminate the script
-            # this will release all globals which will remove all event handlers
-            adsk.terminate()
-        except:
-            if ui:
-                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):    
-    def __init__(self):
-        super().__init__()        
     def notify(self, args):
         try:
             cmd = args.command
@@ -223,291 +231,207 @@ class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             cmd.executePreview.add(onExecutePreview)
             onDestroy = HolsterCommandDestroyHandler()
             cmd.destroy.add(onDestroy)
+            
             # keep the handler referenced beyond this function
-            handlers.append(onExecute)
-            handlers.append(onExecutePreview)
-            handlers.append(onDestroy)
+            #
+            _handlers.append(onExecute)
+            _handlers.append(onExecutePreview)
+            _handlers.append(onDestroy)
+
+            finestIncrement = 1.0
 
             #define the inputs
             inputs = cmd.commandInputs
             
-            finestIncrement = 1.0
+            global _holsterName
+            global _remoteWidth, _remoteLength, _remoteThickness
+            global _frontSlotWidth, _frontHeight
+            global _backCornerRound, _softenFillet, _frontSlotRound
+            global _sideThickness, _backThickness, _bottomThickness
+            global _tolerance         
+            global _remoteDetailsGroup, _holsterDetailsGroup, _holsterAppearanceGroup, _holsterStrengthGroup, _toleranceGroup 
             
-            # JRS: These values / ranges are not set
-            # 
-            inputs.addStringValueInput('holsterName', 'Holster Name', defaultHolsterName)
-             
-            initRemoteWidth = adsk.core.ValueInput.createByReal(defaultRemoteWidth)
-            inputs.addFloatSpinnerCommandInput('remoteWidth', 'Remote Width', '', 0.25, 100.0, finestIncrement, defaultRemoteWidth)
-
-            initremoteLength = adsk.core.ValueInput.createByReal(defaultRemoteLength)
-            inputs.addFloatSpinnerCommandInput('remoteLength', 'Remote Height', '', 0.25, 100.0, finestIncrement, defaultRemoteLength)
-
-            initRemoteThickness = adsk.core.ValueInput.createByReal(defaultRemoteThickness)
-            inputs.addFloatSpinnerCommandInput('remoteThickness', 'Remote Thickness', '', 0.25, 100.0, finestIncrement, defaultRemoteThickness)
-
-            initFrontHeight = adsk.core.ValueInput.createByReal(defaultFrontHeight)
-            inputs.addFloatSpinnerCommandInput('frontHeight', 'Front Height', '', 0.25, 100.0, finestIncrement, defaultFrontHeight)
-
-            initFrontSlotWidth = adsk.core.ValueInput.createByReal(defaultFrontSlotWidth)
-            inputs.addFloatSpinnerCommandInput('frontSlotWidth', 'Front Slot Width', '', 0.0, 100.0, finestIncrement, defaultFrontSlotWidth)
-
-            initBackCornerRound = adsk.core.ValueInput.createByReal(defaultBackCornerRound)
-            inputs.addFloatSpinnerCommandInput('backCornerRound', 'Back Corner Round', '', 0.0, 100.0, finestIncrement, defaultBackCornerRound)
-
-            initFillet = adsk.core.ValueInput.createByReal(defaultFillet)
-            inputs.addFloatSpinnerCommandInput('fillet', 'Overall Fillet', '', 0.25, 100.0, 0.01, defaultFillet)
-
-            initFrontSlotRound = adsk.core.ValueInput.createByReal(defaultFrontSlotRound)
-            inputs.addFloatSpinnerCommandInput('frontSlotRound', 'Front Slot Round', '', 0.25, 100.0, finestIncrement, defaultFrontSlotRound)
-
-            initSideThickness = adsk.core.ValueInput.createByReal(defaultSideThickness)
-            inputs.addFloatSpinnerCommandInput('sideThickness', 'Side Thickness', '', 0.25, 100.0, finestIncrement, defaultSideThickness)
-
-            initBackThickness = adsk.core.ValueInput.createByReal(defaultBackThickness)
-            inputs.addFloatSpinnerCommandInput('backThickness', 'Back Thickness', '', 0.25, 100.0, finestIncrement, defaultBackThickness)
-
-            initBottomThickness = adsk.core.ValueInput.createByReal(defaultBottomThickness)
-            inputs.addFloatSpinnerCommandInput('bottomThickness', 'Bottom Thickness', '', 0.25, 100.0, finestIncrement, defaultBottomThickness)
-
-            initTolerance = adsk.core.ValueInput.createByReal(defaultTolerance)
-            inputs.addFloatSpinnerCommandInput('tolerance', 'Tolerance', '', 0.25, 100.0, 0.01, defaultTolerance)
-
-            initTemp = adsk.core.ValueInput.createByReal(0)
-            inputs.addIntegerSpinnerCommandInput('temp', 'Temp', 0, 50, 1, 0)
+            _holsterName = inputs.addStringValueInput(_commandId + '_holsterName', 'Holster Name', defaultHolsterName)
             
+            # Remote details
+            #
+            _remoteDetailsGroup = inputs.addGroupCommandInput(_commandId + '_remoteDetailsGroup', 'Remote Details')
+            _remoteDetailsGroup.isExpanded = True
+
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteWidth', 'Remote Width', '', 0.25, 100.0, finestIncrement, defaultRemoteWidth)
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteLength', 'Remote Length', '', 0.25, 100.0, finestIncrement, defaultRemoteLength)
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteThickness', 'Remote Thickness', '', 0.25, 100.0, finestIncrement, defaultRemoteThickness)
+            
+            # Holster Details
+            #            
+            _holsterDetailsGroup = inputs.addGroupCommandInput(_commandId + '_holsterDetailsGroup', 'Holster Details')
+            _holsterDetailsGroup.isExpanded = True
+
+            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontSlotWidth', 'Slot Width', '', 0.25, 100, finestIncrement, defaultFrontSlotWidth)
+            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontHeight', 'FrontHeight', '', 0.25, 100, finestIncrement, defaultFrontHeight)
+
+            # Holster Appearance
+            #
+            _holsterAppearanceGroup = inputs.addGroupCommandInput(_commandId + '_holsterAppearanceGroup', 'Holster Appearance')
+            _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('backCornerRound', 'Back Corner Round', '', 0.25, 100, finestIncrement, defaultBackCornerRound)
+            _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('frontSlotRound', 'Slot Round', '', 0.0, 30, finestIncrement, defaultFrontSlotRound)
+            _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('softenFillet', 'Overall Fillet', '', 0.0, 100, 0.01, defaultSoftenFillet)
+
+            
+            # Holster Strength
+            #
+            _holsterStrengthGroup = inputs.addGroupCommandInput(_commandId + '_holsterStrengthGroup', 'Holster Strength')
+            _holsterStrengthGroup.children.addFloatSpinnerCommandInput('sideThickness', 'Side Thickness', '', 0.25, 100, finestIncrement, defaultSideThickness)
+            _holsterStrengthGroup.children.addFloatSpinnerCommandInput('backThickness', 'Back Thickness', '', 0.25, 100, finestIncrement, defaultBackThickness)
+            _holsterStrengthGroup.children.addFloatSpinnerCommandInput('bottomThickness', 'Bottom Thickness', '', 0.25, 100, finestIncrement, defaultBottomThickness)
+            _holsterStrengthGroup.isExpanded = False
+            
+            # Tolerance Group
+            _toleranceGroup = inputs.addGroupCommandInput(_commandId + '_toleranceGroup', 'Tolerance Group')
+            _toleranceGroup.children.addFloatSpinnerCommandInput('tolerance', 'Tolerance', '', 0.1, 10, 0.01, defaultTolerance)
+            _toleranceGroup.isExpanded = False            
             
         except:
-            if ui:
-                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+            if _ui:
+                _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
-class Holster:
+class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
     def __init__(self):
-        self._holsterName = defaultHolsterName
-        self._remoteWidth = defaultRemoteWidth
-        self._remoteLength = defaultRemoteLength
-        self._remoteThickness = defaultRemoteThickness
-        self._frontSlotWidth = defaultFrontSlotWidth
-        self._frontHeight = defaultFrontHeight
-        self._backCornerRound = defaultBackCornerRound
-        self._fillet = defaultFillet
-        self._frontSlotRound = defaultFrontSlotRound
-        self._sideThickness = defaultSideThickness
-        self._backThickness = defaultBackThickness
-        self._bottomThickness = defaultBottomThickness
-        self._tolerance = defaultTolerance
-        self._temp = 0
-
-    # properties
-    #
-    @property
-    def holsterName(self):
-        return self._holsterName
-    @holsterName.setter
-    def holsterName(self, value):
-        self._holsterName = value
-
-    @property
-    def remoteWidth(self):
-        return self._remoteWidth + self._tolerance
-    @remoteWidth.setter
-    def remoteWidth(self, value):
-        self._remoteWidth = value
-
-    @property
-    def remoteLength(self):
-        return self._remoteLength
-    @remoteLength.setter
-    def remoteLength(self, value):
-        self._remoteLength = value
-
-    @property
-    def remoteThickness(self):
-        return self._remoteThickness + self._tolerance
-    @remoteThickness.setter
-    def remoteThickness(self, value):
-        self._remoteThickness = value
-
-    @property
-    def frontSlotWidth(self):
-        return self._frontSlotWidth
-    @frontSlotWidth.setter
-    def frontSlotWidth(self, value):
-        self._frontSlotWidth = value
-
-    @property
-    def frontHeight(self):
-        return self._frontHeight
-    @frontHeight.setter
-    def frontHeight(self, value):
-        self._frontHeight = value
-
-    @property
-    def backCornerRound(self):
-        return self._backCornerRound
-    @backCornerRound.setter
-    def backCornerRound(self, value):
-        self._backCornerRound = value
-
-    @property
-    def fillet(self):
-        return self._fillet
-    @fillet.setter
-    def fillet(self, value):
-        self._fillet = value
-
-    @property
-    def frontSlotRound(self):
-        return self._frontSlotRound
-    @frontSlotRound.setter
-    def frontSlotRound(self, value):
-        self._frontSlotRound = value
-
-    @property
-    def sideThickness(self):
-        return self._sideThickness
-    @sideThickness.setter
-    def sideThickness(self, value):
-        self._sideThickness = value
-        
-    @property
-    def backThickness(self):
-        return self._backThickness
-    @backThickness.setter
-    def backThickness(self, value):
-        self._backThickness = value
-
-    @property
-    def bottomThickness(self):
-        return self._bottomThickness
-    @bottomThickness.setter
-    def bottomThickness(self, value):
-        self._bottomThickness = value
-
-    @property
-    def tolerance(self):
-        return self._tolerance
-    @tolerance.setter
-    def tolerance(self, value):
-        self._tolerance = value
-
-    @property
-    def temp(self):
-        return self._temp
-    @temp.setter
-    def temp(self, value):
-        self._temp = value
-
-    def buildHolster(self):
+        super().__init__()
+    def notify(self, args):
         try:
-            # Get the active design.
-            app = adsk.core.Application.get()
-            product = app.activeProduct
-            design = adsk.fusion.Design.cast(product)
-            ui = app.userInterface
+            eventArgs = adsk.core.CommandEventArgs.cast(args)
+            
+            unitsMgr = _app.activeProduct.unitsManager
+            command = args.firingEvent.sender
+            inputs = command.commandInputs
 
-            global component
+            global _holsterName
+            global _remoteWidth, _remoteLength, _remoteThickness
+            global _frontSlotWidth, _frontHeight
+            global _backCornerRound, _softenFillet, _frontSlotRound
+            global _sideThickness, _backThickness, _bottomThickness
+            global _tolerance         
             
-            # Units
-            design.fusionUnitsManager.distanceDisplayUnits = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
-
-            # Main component
-            component = createComponent(design, self.holsterName)
+            for input in inputs:
+                if input.id == 'holsterName':
+                    _holsterName = input.value
+                elif input.id == 'remoteWidth':
+                    _remoteWidth = input.value
+                elif input.id == 'remoteLength':
+                    _remoteLength = input.value
+                elif input.id == 'remoteThickness':
+                    _remoteThickness = input.value
+                elif input.id == 'frontSlotWidth':
+                    _frontSlotWidth = input.value
+                elif input.id == 'frontHeight':
+                    _frontHeight = input.value
+                elif input.id == 'backCornerRound':
+                    _backCornerRound = input.value
+                elif input.id == 'softenFillet':
+                    _softenFillet = input.value
+                elif input.id == 'frontSlotRound':
+                    _frontSlotRound = input.value
+                elif input.id == 'sideThickness':
+                    _sideThickness = input.value                
+                elif input.id == 'backThickness':
+                    _backThickness = input.value                
+                elif input.id == 'bottomThickness':
+                    _bottomThickness = input.value                
+                elif input.id == 'tolerance':
+                    _tolerance = input.value                
+             
+            args.isValidResult = True
             
-            if component is None:
-                ui.messageBox('New component failed to create', 'New Component Failed')
-                return
+            component = createComponent(_des, _holsterName.value)
             
-            # This is the flow of how I built the holster by hand
-            #
-            # 1) create the base rectangle on the XY plane, (remoteWidth + 2*sideThickness) x (remoteThickness + sideThickness + backThickness)
-            # 2) extrude that rectangle to the remoteLength + bottomThickness
-            # 3) add rectangle of side thickness (OK, not exactly- could have a different back thickness)
-            # 4) extrude that offset to remoteLength (leaving BottomThickness)
-            # Sketch base
-            base_rect_profile = createBaseRectSketch(component, self)
-            distance = createDistance((self.remoteLength + self.bottomThickness) * SCALE)
+            base_rect_profile = createBaseRectSketch(component)
+            distance = createDistance((_remoteLength + _bottomThickness) * SCALE)
             
             # Extrude to full height
             #
             holster = component.features.extrudeFeatures.addSimple(base_rect_profile, distance, NEW_BODY)
             holster_body = holster.bodies.item(0)
-            holster_body.name = "Holster"
-            
+            holster_body.name = _holsterName.value
+
             # Cut out the pocket
             #
-            pocket_profile = createPocketSketch(component, self)            
-            pocket_depth = createDistance(self.remoteLength * SCALE * -1)
+            pocket_profile = createPocketSketch(component)            
+            pocket_depth = createDistance(_remoteLength * SCALE * -1)
             component.features.extrudeFeatures.addSimple(pocket_profile, pocket_depth, CUT)
 
             # Push down the front
             #
-            front_profile = createFrontSketch(component, self)            
-            front_depth = createDistance((self.remoteLength - self.frontHeight) * SCALE * -1)
+            front_profile = createFrontSketch(component)            
+            front_depth = createDistance((_remoteLength - _frontHeight) * SCALE * -1)
             component.features.extrudeFeatures.addSimple(front_profile, front_depth, CUT)
 
             # Create Slot
             #
-            slot_profile = createSlotSketch(component, self)
-            slot_depth = createDistance((self.remoteThickness + self.sideThickness) * SCALE)
+            slot_profile = createSlotSketch(component)
+            slot_depth = createDistance((_remoteThickness + _sideThickness) * SCALE)
             component.features.extrudeFeatures.addSimple(slot_profile, slot_depth, CUT)
             
-            # Round the back corners
-            #
             edges = holster_body.edges
             fillet_edges = adsk.core.ObjectCollection.create()
 
-            for n in range(edges.count):
-                edge = edges.item(n)
-                if math.isclose(edge.length, self.backThickness * SCALE):
-                    # Need to figure out where it is
-                    bb = edge.boundingBox
-                    maxZ = bb.maxPoint.z
-                    minZ = bb.minPoint.z
-                    if math.isclose(maxZ, minZ) and math.isclose(maxZ, (self.remoteLength + self.bottomThickness) * SCALE):
-                        fillet_edges.add(edge)
+            # Round the back corners
+            #
+            if _backCornerRound > 0:
+                for n in range(edges.count):
+                    edge = edges.item(n)
+                    if math.isclose(edge.length, _backThickness * SCALE):
+                        # Need to figure out where it is
+                        bb = edge.boundingBox
+                        maxZ = bb.maxPoint.z
+                        minZ = bb.minPoint.z
+                        if math.isclose(maxZ, minZ) and math.isclose(maxZ, (_remoteLength + _bottomThickness) * SCALE):
+                            fillet_edges.add(edge)
 
-            fillets = component.features.filletFeatures
-            fillet_input = fillets.createInput()
-            fillet_radius = createDistance(self.backCornerRound * SCALE)
-            fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
-            fillet_input.isG2 = False
-            fillet_input.isRollingBallCorner = True
-            top_fillet = fillets.add(fillet_input)
+                fillets = component.features.filletFeatures
+                fillet_input = fillets.createInput()
+                fillet_radius = createDistance(_backCornerRound * SCALE)
+                fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
+                fillet_input.isG2 = False
+                fillet_input.isRollingBallCorner = True
+                top_fillet = fillets.add(fillet_input)
 
-            fillet_edges.clear()
-            for n in range(edges.count):
-                edge = edges.item(n)
-                if math.isclose(edge.length, self.sideThickness * SCALE):
-                    # Need to figure out where it is
-                    bb = edge.boundingBox
-                    maxZ = bb.maxPoint.z
-                    minZ = bb.minPoint.z
-                    minY = bb.minPoint.y
+            # Round the front/slot corners
+            #            
+            if _frontSlotRound > 0:
+                fillet_edges.clear()
+                for n in range(edges.count):
+                    edge = edges.item(n)
+                    if math.isclose(edge.length, _sideThickness * SCALE):
+                        # Need to figure out where it is
+                        bb = edge.boundingBox
+                        maxZ = bb.maxPoint.z
+                        minZ = bb.minPoint.z
+                        minY = bb.minPoint.y
                     
-                    if math.isclose(maxZ, minZ) and math.isclose(maxZ, (self.frontHeight + self.bottomThickness) * SCALE) and math.isclose(minY, 0):
-                        fillet_edges.add(edge)
+                        if math.isclose(maxZ, minZ) and math.isclose(maxZ, (_frontHeight + _bottomThickness) * SCALE) and math.isclose(minY, 0):
+                            fillet_edges.add(edge)
 
-            fillets = component.features.filletFeatures
-            fillet_input = fillets.createInput()
-            fillet_radius = createDistance(self.frontSlotRound * SCALE)
-            fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
-            fillet_input.isG2 = False
-            fillet_input.isRollingBallCorner = True
-            top_fillet = fillets.add(fillet_input)
+                fillets = component.features.filletFeatures
+                fillet_input = fillets.createInput()
+                fillet_radius = createDistance(_frontSlotRound * SCALE)
+                fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
+                fillet_input.isG2 = False
+                fillet_input.isRollingBallCorner = True
+                top_fillet = fillets.add(fillet_input)
             
-            self.includeScrewHoles = True
+            _includeScrewHoles = True
 
-            if self.includeScrewHoles:
+            if _includeScrewHoles:
                 # Magnet hole sketch
-                screwHolesProfile = createScrewHolesSketch(component, self, 2)
+                screwHolesProfile = createScrewHolesSketch(component, 2)
 
                 # Extrude for magnets
-                distance = createDistance(self.backThickness * SCALE)
+                distance = createDistance(_backThickness * SCALE)
                 component.features.extrudeFeatures.addSimple(screwHolesProfile, distance, CUT)
                 
-                screwHolesProfile = createScrewHolesSketch(component, self, 4)
-                distance = createDistance(self.backThickness / 3 * SCALE)
+                screwHolesProfile = createScrewHolesSketch(component, 4)
+                distance = createDistance(_backThickness / 3 * SCALE)
                 component.features.extrudeFeatures.addSimple(screwHolesProfile, distance, CUT)
                 
             # Soften everything
@@ -519,106 +443,26 @@ class Holster:
 
             fillets = component.features.filletFeatures
             fillet_input = fillets.createInput()
-            fillet_radius = createDistance(self.fillet * SCALE)
+            fillet_radius = createDistance(_softenFillet * SCALE)
             fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
             fillet_input.isG2 = False
             fillet_input.isRollingBallCorner = True
             top_fillet = fillets.add(fillet_input)
- 
-
+             
         except:
-            if ui:
-                ui.messageBox('Failed to compute the holster. This is most likely because the input values define an invalid holster.')
-                ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+            if _ui:
+                _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
-    
-def createScrewHolesSketch(component: adsk.fusion.Component, holster, diameter) -> adsk.core.ObjectCollection:
-    sketch: adsk.fusion.Sketch = component.sketches.add(component.xZConstructionPlane)
-    sketch.name = "Screw Holes Sketch"
+class HolsterCommandDestroyHandler(adsk.core.CommandEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+#            eventArgs = adsk.core.CommandEventArgs.cast(args)
 
-    holesCenter = (holster.sideThickness + holster.remoteWidth / 2)
-    holesBack = (holster.sideThickness + holster.remoteThickness)
-    holesSpace = (holster.bottomThickness + holster.remoteLength) / 4 * -1
-    
-    sketch.sketchCurves.sketchCircles.addByCenterRadius(createPoint(holesCenter * SCALE, holesSpace * SCALE, holesBack * SCALE), diameter * SCALE)
-    sketch.sketchCurves.sketchCircles.addByCenterRadius(createPoint(holesCenter * SCALE, 3 * holesSpace * SCALE, holesBack * SCALE), diameter * SCALE)
-
-    circles = adsk.core.ObjectCollection.create()
-    for n in range(2):
-        circles.add(sketch.profiles.item(n))
-
-    return circles
-
-def createPocketSketch(component: adsk.fusion.Component, holster) -> adsk.core.ObjectCollection:
-    sketch: adsk.fusion.Sketch = component.sketches.add(component.xYConstructionPlane)
-    sketch.name = "Pocket Sketch"
-    
-    p1 = createPoint((holster.sideThickness) * SCALE, (holster.sideThickness) * SCALE, (holster.remoteLength + holster.bottomThickness) * SCALE)
-    p2 = createPoint((holster.sideThickness + holster.remoteWidth) * SCALE, (holster.sideThickness + holster.remoteThickness) * SCALE, (holster.remoteLength + holster.bottomThickness) * SCALE)
-
-    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
-
-    rect = adsk.core.ObjectCollection.create()
-    rect.add(sketch.profiles.item(0))
-
-    return rect
-            
-def createFrontSketch(component: adsk.fusion.Component, holster) -> adsk.core.ObjectCollection:
-    sketch: adsk.fusion.Sketch = component.sketches.add(component.xYConstructionPlane)
-    sketch.name = "Front Sketch"
-
-    p1 = createPoint(0, 0, (holster.remoteLength + holster.bottomThickness) * SCALE)
-    p2 = createPoint((2 * holster.sideThickness + holster.remoteWidth) * SCALE, (holster.sideThickness + holster.remoteThickness) * SCALE, (holster.remoteLength + holster.bottomThickness) * SCALE)
-
-    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
-
-    rect = adsk.core.ObjectCollection.create()
-    rect.add(sketch.profiles.item(0))
-
-    return rect
-
-def createSlotSketch(component: adsk.fusion.Component, holster) -> adsk.core.ObjectCollection:
-    sketch: adsk.fusion.Sketch = component.sketches.add(component.xZConstructionPlane)
-    sketch.name = "Slot Sketch"
-    
-    slotLeft = (2 * holster.sideThickness + holster.remoteWidth - holster.frontSlotWidth) / 2
-    p1 = createPoint(slotLeft * SCALE, 0, 0)
-    p2 = createPoint((slotLeft + holster.frontSlotWidth) * SCALE, -1 * (holster.frontHeight + holster.bottomThickness) * SCALE, 0)
-
-    sketch.sketchCurves.sketchLines.addTwoPointRectangle(p1, p2)
-   
-    rect = adsk.core.ObjectCollection.create()
-    rect.add(sketch.profiles.item(0))
-
-    return rect
-
-def run(context):
-    try:
-        product = app.activeProduct
-        design = adsk.fusion.Design.cast(product)
-        if not design:
-            ui.messageBox('It is not supported in current workspace, please change to MODEL workspace and try again.')
-            return
-        commandDefinitions = ui.commandDefinitions
-        
-        #check the command exists or not
-        #
-        cmdDef = commandDefinitions.itemById('RemoteHolster')
-        if not cmdDef:
-            cmdDef = commandDefinitions.addButtonDefinition('RemoteHolster',
-                    'Create a Remote Holster',
-                    'Create a Remote Holster.')
-
-        onCommandCreated = HolsterCommandCreatedHandler()
-        cmdDef.commandCreated.add(onCommandCreated)
-        # keep the handler referenced beyond this function
-        handlers.append(onCommandCreated)
-        inputs = adsk.core.NamedValues.create()
-        
-        cmdDef.execute(inputs)
-
-        # prevent this module from being terminate when the script returns, because we are waiting for event handlers to fire
-        adsk.autoTerminate(False)
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+            # when the command is done, terminate the script
+            # this will release all globals which will remove all event handlers
+            adsk.terminate()
+        except:
+            if _ui:
+                _ui.messageBox('Failed in HolsterCommandDestroyHandler:\n{}'.format(traceback.format_exc()))     
