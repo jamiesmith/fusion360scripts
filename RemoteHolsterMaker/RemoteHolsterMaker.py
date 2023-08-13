@@ -63,6 +63,7 @@ _sideThickness     = adsk.core.FloatSpinnerCommandInput.cast(None)
 _backThickness     = adsk.core.FloatSpinnerCommandInput.cast(None)
 _bottomThickness   = adsk.core.FloatSpinnerCommandInput.cast(None)
 _tolerance         = adsk.core.IntegerSliderCommandInput.cast(None)
+_includeScrewHoles = True
 
 #############################################
 # Global Command Groups
@@ -276,6 +277,7 @@ class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('backCornerRound', 'Back Corner Round', '', 0.25, 100, finestIncrement, defaultBackCornerRound)
             _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('frontSlotRound', 'Slot Round', '', 0.0, 30, finestIncrement, defaultFrontSlotRound)
             _holsterAppearanceGroup.children.addFloatSpinnerCommandInput('softenFillet', 'Overall Fillet', '', 0.0, 100, 0.01, defaultSoftenFillet)
+            _holsterAppearanceGroup.children.addBoolValueInput('includeScrewHoles', 'Include Screw Holes?', True, '', True)
 
             
             # Holster Strength
@@ -310,7 +312,7 @@ class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
             global _remoteWidth, _remoteLength, _remoteThickness
             global _frontSlotWidth, _frontHeight
             global _backCornerRound, _softenFillet, _frontSlotRound
-            global _sideThickness, _backThickness, _bottomThickness
+            global _sideThickness, _backThickness, _bottomThickness, _includeScrewHoles
             global _tolerance         
             
             for input in inputs:
@@ -338,6 +340,8 @@ class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
                     _backThickness = input.value                
                 elif input.id == 'bottomThickness':
                     _bottomThickness = input.value                
+                elif input.id == 'includeScrewHoles':
+                    _includeScrewHoles = input.value                
                 elif input.id == 'tolerance':
                     _tolerance = input.value                
              
@@ -420,8 +424,6 @@ class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
                 fillet_input.isRollingBallCorner = True
                 top_fillet = fillets.add(fillet_input)
             
-            _includeScrewHoles = True
-
             if _includeScrewHoles:
                 # Magnet hole sketch
                 screwHolesProfile = createScrewHolesSketch(component, 2)
