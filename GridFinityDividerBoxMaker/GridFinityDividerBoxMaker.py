@@ -11,6 +11,10 @@ defaultBoxName = "Box"
 defaultSlotsWide = 2
 defaultSlotsDeep = 2
 
+# Miles'
+#
+defaultSlotsHigh = 1.31
+
 # 52" Husky case 
 #
 defaultSlotsHigh = 1.45

@@ -259,17 +259,17 @@ class HolsterCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             _remoteDetailsGroup = inputs.addGroupCommandInput(_commandId + '_remoteDetailsGroup', 'Remote Details')
             _remoteDetailsGroup.isExpanded = True
 
-            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteWidth', 'Remote Width', '', 0.25, 100.0, finestIncrement, defaultRemoteWidth)
-            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteLength', 'Remote Length', '', 0.25, 100.0, finestIncrement, defaultRemoteLength)
-            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteThickness', 'Remote Thickness', '', 0.25, 100.0, finestIncrement, defaultRemoteThickness)
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteWidth', 'Remote Width', '', 0.25, 200.0, finestIncrement, defaultRemoteWidth)
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteLength', 'Remote Length', '', 0.25, 200.0, finestIncrement, defaultRemoteLength)
+            _remoteDetailsGroup.children.addFloatSpinnerCommandInput('remoteThickness', 'Remote Thickness', '', 0.25, 200.0, finestIncrement, defaultRemoteThickness)
             
             # Holster Details
             #            
             _holsterDetailsGroup = inputs.addGroupCommandInput(_commandId + '_holsterDetailsGroup', 'Holster Details')
             _holsterDetailsGroup.isExpanded = True
 
-            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontSlotWidth', 'Slot Width', '', 0.25, 100, finestIncrement, defaultFrontSlotWidth)
-            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontHeight', 'FrontHeight', '', 0.25, 100, finestIncrement, defaultFrontHeight)
+            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontSlotWidth', 'Slot Width', '', 0.25, 200, finestIncrement, defaultFrontSlotWidth)
+            _holsterDetailsGroup.children.addFloatSpinnerCommandInput('frontHeight', 'FrontHeight', '', 0.25, 200, finestIncrement, defaultFrontHeight)
 
             # Holster Appearance
             #
@@ -438,18 +438,19 @@ class HolsterCommandExecuteHandler(adsk.core.CommandEventHandler):
                 
             # Soften everything
             # 
-            fillet_edges.clear()
-            for n in range(edges.count):
-                edge = edges.item(n)
-                fillet_edges.add(edge)
+            if _softenFillet > 0:
+                fillet_edges.clear()
+                for n in range(edges.count):
+                    edge = edges.item(n)
+                    fillet_edges.add(edge)
 
-            fillets = component.features.filletFeatures
-            fillet_input = fillets.createInput()
-            fillet_radius = createDistance(_softenFillet * SCALE)
-            fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
-            fillet_input.isG2 = False
-            fillet_input.isRollingBallCorner = True
-            top_fillet = fillets.add(fillet_input)
+                fillets = component.features.filletFeatures
+                fillet_input = fillets.createInput()
+                fillet_radius = createDistance(_softenFillet * SCALE)
+                fillet_input.addConstantRadiusEdgeSet(fillet_edges, fillet_radius, True)
+                fillet_input.isG2 = False
+                fillet_input.isRollingBallCorner = True
+                top_fillet = fillets.add(fillet_input)
              
         except:
             if _ui:
